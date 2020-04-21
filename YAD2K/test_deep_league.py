@@ -205,11 +205,116 @@ outfile = open('output/game_data.json', 'w')
 # This will be appended with an object for every frame.
 data_to_write = []
 
+import xml.etree.ElementTree as ET
+
+class CocoBox:
+    def __init__(self, name, xmin, ymin, xmax, ymax, score = 0.0):
+        self.name = name
+        self.xmin = xmin
+        self.ymin = ymin
+        self.xmax = xmax
+        self.ymax = ymax
+        self.score = score
+
+    def in_range(self, threshold, other_box):
+        if abs(other_box.xmin - self.xmin) < threshold and \
+            abs(other_box.ymin - self.ymin) < threshold and \
+            abs(other_box.xmax - self.xmax) < threshold and \
+            abs(other_box.ymax - self.ymax) < threshold:
+                return True
+        return False
+
+    def calculate_iou(self, other_box):
+        xmin = max(other_box.xmin, self.xmin)
+        ymin = max(other_box.ymin, self.ymin)
+        xmax = min(other_box.xmax, self.xmax)
+        ymax = min(other_box.ymax, self.ymax)
+
+        intersection = (xmax - xmin) * (ymax - ymin)
+
+        box1_area = (other_box.xmax - other_box.xmin) * (other_box.ymax - other_box.ymin)
+        box2_area = (self.xmax - self.xmin) * (self.ymax - self.ymin)
+
+        union = box1_area + box2_area - intersection
+
+        iou = intersection / union
+        return iou
+
+
+champions_detected = {}
+champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
+
+champions_in_dataset = {}
+extra_champion_boxes = {}
+
+score_threshold = 0.5
+iou_threshold = 0.7
+
+box_threshold = 5
+total_images = 0
+total_champions_in_images = 1213
+true_positives = 0
+total_champions_detected_in_boxes = 0
+
+false_positives = 0
+false_negatives = 0
+
+true_positives_arr = []
+false_positives_arr = []
+false_negatives_arr = []
+precisions = []
+recalls = []
+accuracy = []
+accuracy_box = []
 
 def test_yolo(image, image_file_name):
+    global champions_detected
+    global champions_in_dataset
+    global true_positives
+    global total_champions_detected_in_boxes
+    global false_positives
+    global false_negatives
+    global extra_champion_boxes
+
+    
+    global true_positives_arr
+    global false_positives_arr
+    global false_negatives_arr
+    global precisions
+    global recalls
+    global accuracy
+    global accuracy_box
+
+    
+    base_name = image_file_name[:image_file_name.find(".")]
+    label_path = 'labels'
+    full_label_path = os.path.join(label_path, base_name + '.xml')
+    if not os.path.exists(full_label_path):
+        return
+
+    root = ET.parse(full_label_path).getroot()
+    #champions_detected = {'rakan': 0, 'sett': 0, 'ezreal': 0, 'zilean': 0, 'fizz': 0, 'leesin': 0, 'fiddlesticks': 0, 'lucian': 0, 'maokai': 0, 'taric': 0, 'kalista': 0, 'missfortune': 0, 'sylas': 0, 'talon': 0, 'akali': 0, 'graves': 0, 'poppy': 0, 'monkeyking': 0, 'braum': 0, 'tristana': 0, 'jarvaniv': 0, 'galio': 0, 'jayce': 0, 'aphelios': 0, 'sona': 0, 'elise': 0, 'camille': 0, 'riven': 0, 'tahmkench': 0, 'senna': 0, 'fiora': 0, 'leblanc': 0, 'pyke': 0, 'aatrox': 0, 'anivia': 0, 'viktor': 0, 'vayne': 0, 'draven': 0, 'lulu': 0, 'irelia': 0, 'bard': 0, 'ekko': 0, 'renekton': 0, 'nidalee': 0, 'kindred': 0, 'nautilus': 0, 'yuumi': 0, 'xayah': 0, 'zed': 0, 'mordekaiser': 0, 'karthus': 0}
+    # parse expected champion locations
+    expected_champion_boxes = {}
+    extra_champion_boxes = {}
+    for obj in root.findall('object'):
+        name = obj.find('name').text
+        bndbox = obj.find('bndbox')
+        xmin = float(bndbox.find('xmin').text)
+        ymin = float(bndbox.find('ymin').text)
+        xmax = float(bndbox.find('xmax').text)
+        ymax = float(bndbox.find('ymax').text)
+
+        box = CocoBox(name, xmin, ymin, xmax, ymax)
+        expected_champion_boxes[name] = box
+
+    for k, v in expected_champion_boxes.items():
+        champions_in_dataset[k] = 0
+
     if is_fixed_size:  # TODO: When resizing we can use minibatch input.
         resized_image = image.resize(
             tuple(reversed(model_image_size)), Image.BICUBIC)
+        #print('new', resized_image.height, resized_image.width)
         image_data = np.array(resized_image, dtype='float32')
     else:
         # Due to skip connection + max pooling in YOLO_v2, inputs must have
@@ -231,7 +336,7 @@ def test_yolo(image, image_file_name):
             K.learning_phase(): 0
         })
 
-    print('Found {} boxes for {}'.format(len(out_boxes), image_file_name))
+    #print('Found {} boxes for {}'.format(len(out_boxes), image_file_name))
 
     # Write data to a JSON file located within the 'output/' directory.
     # This ASSUMES that the game comes from a spectated video starting at 0:00
@@ -254,6 +359,46 @@ def test_yolo(image, image_file_name):
         if user_did_specify_champs and predicted_class not in champs_in_game:
             continue
 
+        label = predicted_class.lower()
+        top, left, bottom, right = box
+        x1 = max(0, np.floor(top + 0.5).astype('int32'))
+        y1 = max(0, np.floor(left + 0.5).astype('int32'))
+        x2 = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
+        y2 = min(image.size[0], np.floor(right + 0.5).astype('int32'))
+
+        if score > score_threshold:
+            actual_box = CocoBox(label, x1, y1, x2, y2, score)
+            expected_champion_box = expected_champion_boxes.get(label)
+            if expected_champion_box:
+                name = expected_champion_box.name
+                xmin = expected_champion_box.xmin
+                ymin = expected_champion_box.ymin
+                xmax = expected_champion_box.xmax
+                ymax = expected_champion_box.ymax
+
+                if expected_champion_box.in_range(box_threshold, actual_box):
+                    total_champions_detected_in_boxes += 1
+
+                if expected_champion_box.calculate_iou(actual_box) > iou_threshold:
+                    if label not in champions_detected:
+                        champions_detected[label] = 0
+                    champions_detected[label] += 1
+                    true_positives += 1
+                else:
+                    false_positives += 1
+
+                del expected_champion_boxes[label]
+            else:
+                extra_champion_boxes[label] = actual_box
+
+        if true_positives + false_positives == 0:
+            precision = 0
+        else:
+            precision = true_positives / (true_positives + false_positives)
+        recall = sum([1 if v > 0 else 0 for v in champions_detected.values()]) / len(champions_detected)
+        #precisions.append(precision)
+        #recalls.append(recall)
+        '''
         label = '{} {:.2f}'.format(predicted_class, score)
 
         draw = ImageDraw.Draw(image)
@@ -286,8 +431,10 @@ def test_yolo(image, image_file_name):
 
 
         del draw
+        '''
+    false_negatives += len(extra_champion_boxes)
 
-    image.save(os.path.join(output_path, image_file_name), quality=90)
+    #image.save(os.path.join(output_path, image_file_name), quality=90)
 
 def process_mp4(test_mp4_vod_path):
     video = cv2.VideoCapture(test_mp4_vod_path)
@@ -317,12 +464,15 @@ def process_mp4(test_mp4_vod_path):
         if count %  fps == 0:
             im = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             im = Image.fromarray(im).crop((1625, 785, 1920, 1080))
+            print('orig', im.height, im.width)
             test_yolo(im, str(file_count) + '.jpg')
             file_count += 1
         count += 1
 
 def _main():
     if args.subcommand == 'images':
+        #precision vs recall
+        '''
         for image_file_name in os.listdir(test_images_path):
             try:
                 image_type = imghdr.what(os.path.join(test_images_path, image_file_name))
@@ -331,8 +481,131 @@ def _main():
             except IsADirectoryError:
                 continue
 
-            image = Image.open(os.path.join(test_images_path, image_file_name)).crop((1645, 805, 1920, 1080))
+            image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
             test_yolo(image, image_file_name)
+
+        print(precisions)
+        print(recalls)
+        print(champions_detected)
+        '''        
+
+        #iou threshold eval
+        global iou_threshold
+        global true_positives_arr
+        global false_positives_arr
+        global false_negatives_arr
+        global precisions
+        global recalls
+        global accuracy
+        global accuracy_box
+
+        global true_positives
+        global false_positives
+        global false_negatives
+        global total_champions_detected_in_boxes
+
+        score_threshold = 0.5
+        iou_threshold = 0.0
+        while iou_threshold < 1.0:
+            champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
+            for image_file_name in os.listdir(test_images_path):
+                try:
+                    image_type = imghdr.what(os.path.join(test_images_path, image_file_name))
+                    if not image_type:
+                        continue
+                except IsADirectoryError:
+                    continue
+
+                image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
+                test_yolo(image, image_file_name)
+
+            precision = true_positives / (true_positives + false_positives)
+            recall = true_positives / (true_positives + false_negatives)
+
+            true_positives_arr.append(true_positives)
+            false_positives_arr.append(false_positives)
+            false_negatives_arr.append(false_negatives)
+            
+            precisions.append(precision)
+            recalls.append(recall)
+            accuracy.append(true_positives / total_champions_in_images)
+            accuracy_box.append(total_champions_detected_in_boxes / total_champions_in_images)
+
+            print(true_positives, false_positives, false_negatives)
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+            total_champions_detected_in_boxes = 0
+
+            iou_threshold += 0.05
+
+        print(true_positives_arr)
+        print(false_positives_arr)
+        print(false_negatives_arr)
+
+        print(precisions)
+        print(recalls)
+        print(accuracy)
+        print(accuracy_box)
+
+        #score threshold
+        global iou_threshold
+        global true_positives_arr
+        global false_positives_arr
+        global false_negatives_arr
+        global precisions
+        global recalls
+        global accuracy
+        global accuracy_box
+
+        global true_positives
+        global false_positives
+        global false_negatives
+        global total_champions_detected_in_boxes
+
+        score_threshold = 0.0
+        iou_threshold = 0.5
+        while score_threshold < 1.0:
+            champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
+            extra_champion_boxes = {}
+            for image_file_name in os.listdir(test_images_path):
+                try:
+                    image_type = imghdr.what(os.path.join(test_images_path, image_file_name))
+                    if not image_type:
+                        continue
+                except IsADirectoryError:
+                    continue
+
+                image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
+                test_yolo(image, image_file_name)
+
+            precision = true_positives / (true_positives + false_positives)
+            recall = true_positives / (true_positives + false_negatives)
+
+            true_positives_arr.append(true_positives)
+            false_positives_arr.append(false_positives)
+            false_negatives_arr.append(false_negatives)
+            
+            precisions.append(precision)
+            recalls.append(recall)
+            accuracy.append(true_positives / total_champions_in_images)
+            accuracy_box.append(total_champions_detected_in_boxes / total_champions_in_images)
+
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+            total_champions_detected_in_boxes = 0
+
+            score_threshold += 0.05
+
+        print(true_positives_arr)
+        print(false_positives_arr)
+        print(false_negatives_arr)
+
+        print(precisions)
+        print(recalls)
+        print(accuracy)
+        print(accuracy_box)
 
 
     if args.subcommand == 'npz':
