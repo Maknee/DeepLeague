@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 """Run a YOLO_v2 style detection model on test images."""
+import xml.etree.ElementTree as ET
 import argparse
 import colorsys
 import imghdr
@@ -62,7 +63,7 @@ parser.add_argument(
     '--champs_in_game',
     type=str,
     help='to help avoid bad predictions, tell DeepLeague the 10 champions in the game of the VOD you are passing',
-    default= "")
+    default="")
 
 subparsers = parser.add_subparsers(dest='subcommand')
 
@@ -205,10 +206,9 @@ outfile = open('output/game_data.json', 'w')
 # This will be appended with an object for every frame.
 data_to_write = []
 
-import xml.etree.ElementTree as ET
 
 class CocoBox:
-    def __init__(self, name, xmin, ymin, xmax, ymax, score = 0.0):
+    def __init__(self, name, xmin, ymin, xmax, ymax, score=0.0):
         self.name = name
         self.xmin = xmin
         self.ymin = ymin
@@ -218,10 +218,10 @@ class CocoBox:
 
     def in_range(self, threshold, other_box):
         if abs(other_box.xmin - self.xmin) < threshold and \
-            abs(other_box.ymin - self.ymin) < threshold and \
-            abs(other_box.xmax - self.xmax) < threshold and \
-            abs(other_box.ymax - self.ymax) < threshold:
-                return True
+                abs(other_box.ymin - self.ymin) < threshold and \
+                abs(other_box.xmax - self.xmax) < threshold and \
+                abs(other_box.ymax - self.ymax) < threshold:
+            return True
         return False
 
     def calculate_iou(self, other_box):
@@ -252,7 +252,7 @@ iou_threshold = 0.7
 
 box_threshold = 5
 total_images = 0
-total_champions_in_images = 1213
+total_champions_in_images = 0
 true_positives = 0
 total_champions_detected_in_boxes = 0
 
@@ -267,7 +267,9 @@ recalls = []
 accuracy = []
 accuracy_box = []
 
+
 def test_yolo(image, image_file_name):
+    global total_champions_in_images
     global champions_detected
     global champions_in_dataset
     global true_positives
@@ -276,7 +278,6 @@ def test_yolo(image, image_file_name):
     global false_negatives
     global extra_champion_boxes
 
-    
     global true_positives_arr
     global false_positives_arr
     global false_negatives_arr
@@ -285,7 +286,8 @@ def test_yolo(image, image_file_name):
     global accuracy
     global accuracy_box
 
-    
+    ccc = [c.lower() for c in class_names]
+
     base_name = image_file_name[:image_file_name.find(".")]
     label_path = 'labels'
     full_label_path = os.path.join(label_path, base_name + '.xml')
@@ -306,7 +308,11 @@ def test_yolo(image, image_file_name):
         ymax = float(bndbox.find('ymax').text)
 
         box = CocoBox(name, xmin, ymin, xmax, ymax)
+        if name not in ccc:
+            continue
         expected_champion_boxes[name] = box
+
+    total_champions_in_images += len(expected_champion_boxes)
 
     for k, v in expected_champion_boxes.items():
         champions_in_dataset[k] = 0
@@ -396,8 +402,8 @@ def test_yolo(image, image_file_name):
         else:
             precision = true_positives / (true_positives + false_positives)
         recall = sum([1 if v > 0 else 0 for v in champions_detected.values()]) / len(champions_detected)
-        #precisions.append(precision)
-        #recalls.append(recall)
+        # precisions.append(precision)
+        # recalls.append(recall)
         '''
         label = '{} {:.2f}'.format(predicted_class, score)
 
@@ -432,9 +438,10 @@ def test_yolo(image, image_file_name):
 
         del draw
         '''
-    false_negatives += len(extra_champion_boxes)
+    false_negatives += len(expected_champion_boxes)
 
     #image.save(os.path.join(output_path, image_file_name), quality=90)
+
 
 def process_mp4(test_mp4_vod_path):
     video = cv2.VideoCapture(test_mp4_vod_path)
@@ -443,7 +450,7 @@ def process_mp4(test_mp4_vod_path):
 
     # forward over to the frames you want to start reading from.
     # manually set this, fps * time in seconds you wanna start from
-    video.set(1, 0);
+    video.set(1, 0)
     success, frame = video.read()
     count = 0
     file_count = 0
@@ -461,7 +468,7 @@ def process_mp4(test_mp4_vod_path):
 
         # i save once every fps, which comes out to 1 frames per second.
         # i think anymore than 2 FPS leads to to much repeat data.
-        if count %  fps == 0:
+        if count % fps == 0:
             im = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             im = Image.fromarray(im).crop((1625, 785, 1920, 1080))
             print('orig', im.height, im.width)
@@ -469,9 +476,10 @@ def process_mp4(test_mp4_vod_path):
             file_count += 1
         count += 1
 
+
 def _main():
     if args.subcommand == 'images':
-        #precision vs recall
+        # precision vs recall
         '''
         for image_file_name in os.listdir(test_images_path):
             try:
@@ -487,9 +495,11 @@ def _main():
         print(precisions)
         print(recalls)
         print(champions_detected)
-        '''        
+        '''
 
-        #iou threshold eval
+        # iou threshold eval
+        '''
+        global total_champions_in_images
         global iou_threshold
         global true_positives_arr
         global false_positives_arr
@@ -531,7 +541,8 @@ def _main():
             accuracy.append(true_positives / total_champions_in_images)
             accuracy_box.append(total_champions_detected_in_boxes / total_champions_in_images)
 
-            print(true_positives, false_positives, false_negatives)
+            print(total_champions_in_images, true_positives, false_positives, false_negatives)
+            total_champions_in_images = 0
             true_positives = 0
             false_positives = 0
             false_negatives = 0
@@ -547,8 +558,10 @@ def _main():
         print(recalls)
         print(accuracy)
         print(accuracy_box)
+        '''
 
-        #score threshold
+        # score threshold
+        global total_champions_in_images
         global iou_threshold
         global true_positives_arr
         global false_positives_arr
@@ -558,6 +571,7 @@ def _main():
         global accuracy
         global accuracy_box
 
+        global score_threshold
         global true_positives
         global false_positives
         global false_negatives
@@ -576,7 +590,7 @@ def _main():
                 except IsADirectoryError:
                     continue
 
-                image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
+                image = Image.open(os.path.join(test_images_path, image_file_name))  # .crop((1645, 805, 1920, 1080))
                 test_yolo(image, image_file_name)
 
             precision = true_positives / (true_positives + false_positives)
@@ -585,7 +599,7 @@ def _main():
             true_positives_arr.append(true_positives)
             false_positives_arr.append(false_positives)
             false_negatives_arr.append(false_negatives)
-            
+
             precisions.append(precision)
             recalls.append(recall)
             accuracy.append(true_positives / total_champions_in_images)
@@ -606,7 +620,6 @@ def _main():
         print(recalls)
         print(accuracy)
         print(accuracy_box)
-
 
     if args.subcommand == 'npz':
         npz_obj = np.load(test_npz_path)
@@ -635,6 +648,7 @@ def _main():
         process_mp4(youtube_download_path + '/vod.mp4')
 
     sess.close()
+
 
 if __name__ == '__main__':
     _main()

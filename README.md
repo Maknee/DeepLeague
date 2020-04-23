@@ -1,6 +1,6 @@
 # This repo evaluates deep league
 
-Follow the bottom of the post to setup deep league. Then go to `YAD2K`, place your image folder as `images` in the directory and `labels` in the same directory. Run `python test_deep_league.py -out output images -images images`. This will output arrays. Uncomment out lines 399 and 400 if running precision vs recall else comment it out. This test precision vs recall, iou threshold and classifier threshold. Each is commented out on line starting on 474.
+Follow the bottom of the post to setup deep league. Then go to `YAD2K`, place your image folder as `images` in the directory and `labels` in the same directory. Run `python test_deep_league.py -out output images -images images`. This will output arrays. Uncomment out lines 405 and 406 if running precision vs recall else comment it out. This test precision vs recall, iou threshold and classifier threshold. Each is commented out on line starting on 482.
 
 # DeepLeague - leveraging computer vision and deep learning on the League of Legends mini map + a dataset of over 100,000 labeled images to further A.I research within esports.
 
