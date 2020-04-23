@@ -248,7 +248,7 @@ champions_in_dataset = {}
 extra_champion_boxes = {}
 
 score_threshold = 0.5
-iou_threshold = 0.7
+iou_threshold = 0.5
 
 box_threshold = 5
 total_images = 0
@@ -256,12 +256,14 @@ total_champions_in_images = 0
 true_positives = 0
 total_champions_detected_in_boxes = 0
 
+extra_champions_detected = 0
 false_positives = 0
 false_negatives = 0
 
 true_positives_arr = []
 false_positives_arr = []
 false_negatives_arr = []
+extra_champions_detected_arr = []
 precisions = []
 recalls = []
 accuracy = []
@@ -277,6 +279,7 @@ def test_yolo(image, image_file_name):
     global false_positives
     global false_negatives
     global extra_champion_boxes
+    global extra_champions_detected
 
     global true_positives_arr
     global false_positives_arr
@@ -438,6 +441,7 @@ def test_yolo(image, image_file_name):
 
         del draw
         '''
+    extra_champions_detected += len(extra_champion_boxes)
     false_negatives += len(expected_champion_boxes)
 
     #image.save(os.path.join(output_path, image_file_name), quality=90)
@@ -498,7 +502,6 @@ def _main():
         '''
 
         # iou threshold eval
-        '''
         global total_champions_in_images
         global iou_threshold
         global true_positives_arr
@@ -512,74 +515,13 @@ def _main():
         global true_positives
         global false_positives
         global false_negatives
+        global extra_champions_detected
+        global extra_champion_boxes
         global total_champions_detected_in_boxes
 
         score_threshold = 0.5
         iou_threshold = 0.0
         while iou_threshold < 1.0:
-            champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
-            for image_file_name in os.listdir(test_images_path):
-                try:
-                    image_type = imghdr.what(os.path.join(test_images_path, image_file_name))
-                    if not image_type:
-                        continue
-                except IsADirectoryError:
-                    continue
-
-                image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
-                test_yolo(image, image_file_name)
-
-            precision = true_positives / (true_positives + false_positives)
-            recall = true_positives / (true_positives + false_negatives)
-
-            true_positives_arr.append(true_positives)
-            false_positives_arr.append(false_positives)
-            false_negatives_arr.append(false_negatives)
-            
-            precisions.append(precision)
-            recalls.append(recall)
-            accuracy.append(true_positives / total_champions_in_images)
-            accuracy_box.append(total_champions_detected_in_boxes / total_champions_in_images)
-
-            print(total_champions_in_images, true_positives, false_positives, false_negatives)
-            total_champions_in_images = 0
-            true_positives = 0
-            false_positives = 0
-            false_negatives = 0
-            total_champions_detected_in_boxes = 0
-
-            iou_threshold += 0.05
-
-        print(true_positives_arr)
-        print(false_positives_arr)
-        print(false_negatives_arr)
-
-        print(precisions)
-        print(recalls)
-        print(accuracy)
-        print(accuracy_box)
-        '''
-
-        # score threshold
-        global total_champions_in_images
-        global iou_threshold
-        global true_positives_arr
-        global false_positives_arr
-        global false_negatives_arr
-        global precisions
-        global recalls
-        global accuracy
-        global accuracy_box
-
-        global score_threshold
-        global true_positives
-        global false_positives
-        global false_negatives
-        global total_champions_detected_in_boxes
-
-        score_threshold = 0.0
-        iou_threshold = 0.5
-        while score_threshold < 1.0:
             champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
             extra_champion_boxes = {}
             for image_file_name in os.listdir(test_images_path):
@@ -599,7 +541,77 @@ def _main():
             true_positives_arr.append(true_positives)
             false_positives_arr.append(false_positives)
             false_negatives_arr.append(false_negatives)
+            extra_champions_detected_arr.append(extra_champions_detected)
 
+            precisions.append(precision)
+            recalls.append(recall)
+            accuracy.append(true_positives / total_champions_in_images)
+            accuracy_box.append(total_champions_detected_in_boxes / total_champions_in_images)
+
+            print(total_champions_in_images, true_positives, false_positives, false_negatives)
+            total_champions_in_images = 0
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+            extra_champions_detected = 0
+            total_champions_detected_in_boxes = 0
+
+            iou_threshold += 0.05
+
+        print(true_positives_arr)
+        print(false_positives_arr)
+        print(false_negatives_arr)
+        print(extra_champions_detected_arr)
+
+        print(precisions)
+        print(recalls)
+        print(accuracy)
+        print(accuracy_box)
+
+        # score threshold
+        '''
+        global total_champions_in_images
+        global iou_threshold
+        global true_positives_arr
+        global false_positives_arr
+        global false_negatives_arr
+        global precisions
+        global recalls
+        global accuracy
+        global accuracy_box
+
+        global score_threshold
+        global true_positives
+        global false_positives
+        global false_negatives
+        global extra_champions_detected
+        global extra_champion_boxes
+        global total_champions_detected_in_boxes
+
+        score_threshold = 0.0
+        iou_threshold = 0.5
+        while score_threshold < 1.0:
+            champions_detected = {'graves': 0, 'poppy': 0, 'rakan': 0, 'elise': 0, 'jarvaniv': 0, 'maokai': 0, 'tahmkench': 0, 'lucian': 0, 'leesin': 0, 'lulu': 0, 'nautilus': 0, 'renekton': 0, 'ezreal': 0, 'ekko': 0, 'fizz': 0, 'xayah': 0}
+            extra_champion_boxes = {}
+            for image_file_name in os.listdir(test_images_path):
+                try:
+                    image_type = imghdr.what(os.path.join(test_images_path, image_file_name))
+                    if not image_type:
+                        continue
+                except IsADirectoryError:
+                    continue
+
+                image = Image.open(os.path.join(test_images_path, image_file_name))#.crop((1645, 805, 1920, 1080))
+                test_yolo(image, image_file_name)
+
+            precision = true_positives / (true_positives + false_positives)
+            recall = true_positives / (true_positives + false_negatives)
+
+            true_positives_arr.append(true_positives)
+            false_positives_arr.append(false_positives)
+            false_negatives_arr.append(false_negatives)
+            extra_champions_detected_arr.append(extra_champions_detected)
+            
             precisions.append(precision)
             recalls.append(recall)
             accuracy.append(true_positives / total_champions_in_images)
@@ -608,6 +620,7 @@ def _main():
             true_positives = 0
             false_positives = 0
             false_negatives = 0
+            extra_champions_detected = 0
             total_champions_detected_in_boxes = 0
 
             score_threshold += 0.05
@@ -615,11 +628,13 @@ def _main():
         print(true_positives_arr)
         print(false_positives_arr)
         print(false_negatives_arr)
+        print(extra_champions_detected_arr)
 
         print(precisions)
         print(recalls)
         print(accuracy)
         print(accuracy_box)
+        '''
 
     if args.subcommand == 'npz':
         npz_obj = np.load(test_npz_path)
